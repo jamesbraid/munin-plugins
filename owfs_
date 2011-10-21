@@ -1,0 +1,119 @@
+#!/usr/bin/perl
+
+#%# family=auto
+#%# capabilities=autoconf suggest
+
+use strict;
+use feature qw(say switch);
+use Switch;
+use OW;
+use OWNet;
+use Data::Dumper;
+
+my $ow = OWNet->new('localhost:4304');
+
+my $label_map = {
+    'humidity' => 'relative humidity %',
+    'temperature' => 'degrees Celsius',
+};
+
+my $type_map = {
+    'humidity' => 'humidity',
+    'temperature' => 'temperature',
+};
+
+my $device_map = {
+    '26.D9422B010000' => {
+        'humidity'  => 'HIH4000/humidity',
+    },
+};
+
+sub suggest {
+    foreach my $device (split /,/, $ow->dir('/')) {
+        next unless ($device =~ /[0-9A-F][0-9A-F][.].*/);
+        my $id = $device; $id =~ s/^\///g;
+        if ($ow->present($device . '/temperature')) {
+            say "temperature_" . $id;
+        }
+        if ($ow->present($device . '/humidity')) {
+            say "humidity_" . $id;
+        }
+    }
+}
+
+sub query_device {
+    my $device;
+    my ($type) = ($0 =~ /_(humidity|temperature)_[0-9A-F][0-9A-F][.]/);
+    my ($device) = ($0 =~ /_([0-9A-F][0-9A-F][.].*)$/);
+
+    die "cant find type from $0" unless $type;
+    die "cant find device from $0" unless $device;
+
+    return ($device, $type);
+}
+
+sub autoconf {
+    if ($ow->present('/')) {
+        say "yes"
+    } else {
+        say "no (error talking to owserver)"
+    }
+    exit 0;
+}
+
+
+sub config {
+    my ($device, $type) = query_device();
+
+    my $label = $ENV{label} || "$type $device";
+    my $title = $ENV{title} || "$device";
+    my $vlabel = $label_map->{$type} || die "no vlabel for $type";
+    my $node = normalize_label(sprintf "%s_%s", $type, $device);
+
+    say "graph_title $title";
+    say "graph_args --base 1000";
+    say "graph_vlabel $vlabel";
+    say "graph_category 1wire";
+    say "graph_info $type from 1-wire devices";
+    say "$node.label $label";
+    say "$node.info $label";
+
+}
+
+sub do_it {
+    my ($device, $type) = query_device();
+    my $node = normalize_label(sprintf "%s_%s", $type, $device);
+
+    $type = $type_map->{$type};
+    $type = $device_map->{$device}->{$type} if (exists $device_map->{$device}->{$type});
+
+    my $path = sprintf '/%s/%s', $device, $type;
+
+    die "path $path doesn't exist" unless ($ow->present($path));
+    my $value = trim($ow->read($path));
+
+    say "$node.value $value";
+}
+
+switch ($ARGV[0]) {
+    case 'suggest' { suggest() }
+    case 'config' { config() }
+    case 'autoconf' { autoconf() }
+    else { do_it() }
+}
+
+
+exit;
+
+sub trim {
+    my $string = shift;
+    $string =~ s/^\s+|\s+$//g;
+    return $string;
+}
+
+sub normalize_label {
+    my $string = shift;
+    $string =~ s/[^a-zA-Z0-9]/_/g;
+    $string = lc $string;
+    return $string;
+}
