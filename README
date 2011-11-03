@@ -1,0 +1,4 @@
+Some assorted Munin plugins.
+
+  - alertme_: monitor power usage using AlertMe devices (requires alertmepi.pl)
+  - owfs_: monitor 1wire sensors using OWFS
