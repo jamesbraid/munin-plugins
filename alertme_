@@ -1,0 +1,77 @@
+#!/usr/bin/perl
+
+#%# family=auto
+#%# capabilities=autoconf suggest
+
+use strict;
+use feature qw(say switch);
+use Switch;
+use Data::Dumper;
+use FindBin;
+
+my $alertmepi = $FindBin::RealBin . '/alertmepi.pl';
+die "can't find $alertmepi: $!" if (! -x $alertmepi);
+
+sub suggest {
+
+    my $output = `$alertmepi -r -e all`;
+    foreach my $line (split /\n/, $output) {
+        my ($device_name, $value) = split /\|/, $line;
+        say $device_name;
+    }
+}
+
+sub query_device {
+    my $device;
+    my ($device) = ($0 =~ /_(\w+)$/);
+    die "cant find device from $0" unless $device;
+    return ($device);
+}
+
+sub autoconf {
+    if (-x $alertmepi) {
+        say "yes"
+    } else {
+        say "no (can't find $alertmepi: $!)"
+    }
+    exit 0;
+}
+
+
+sub config {
+    my ($device) = query_device();
+
+    my $label = $ENV{label} || "$device power usage";
+    my $title = $ENV{title} || "$device power usage";
+
+    say "graph_title $title";
+    say "graph_args --base 1000";
+    say "graph_vlabel watts";
+    say "graph_category alertme";
+    say "graph_info power usage from alertme devices";
+    say "watts.label $label";
+    say "watts.info $label";
+
+}
+
+sub do_it {
+    my ($device) = query_device();
+
+    my $output = `$alertmepi -r -e $device`;
+    die "more than one line returned!" if (int (split /\n/, $output) != 1);
+    foreach my $line (split /\n/, $output) {
+        my ($device_name, $value) = split /\|/, $line;
+        say "watts.value $value";
+    }
+
+}
+
+switch ($ARGV[0]) {
+    case 'suggest' { suggest() }
+    case 'config' { config() }
+    case 'autoconf' { autoconf() }
+    else { do_it() }
+}
+
+
+exit;
